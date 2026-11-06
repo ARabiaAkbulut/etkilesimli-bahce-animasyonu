@@ -1,0 +1,12 @@
+Müzik ekleme
+
+pygame.init()
+pygame.mixer.init()
+
+# Müziği başlat 
+try:
+    pygame.mixer.music.load("herhangi_bir_muzik.mp3")
+    pygame.mixer.music.set_volume(0.5)  # Ses seviyesi (0.0 ile 1.0 arası)
+    pygame.mixer.music.play(loops=-1)   # Sürekli döngüde çalması için
+except pygame.error:
+    print("Müzik dosyası bulunamadı! Lütfen dosya adını kontrol edin.")

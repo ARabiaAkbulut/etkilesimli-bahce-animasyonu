@@ -1,0 +1,997 @@
+import math
+import random
+import pygame
+
+pygame.init()
+pygame.mixer.init()
+
+# Müziği başlat
+try:
+    pygame.mixer.music.load("RomanticGlowingFlowerBouquet.mp3")
+    pygame.mixer.music.set_volume(0.5)  # Ses seviyesi (0.0 ile 1.0 arası)
+    pygame.mixer.music.play(loops=-1)   # Sürekli döngüde çalması için
+except pygame.error:
+    print("Müzik dosyası bulunamadı! Lütfen dosya adını kontrol edin.")
+
+# ============================================================
+# GLOWING FLOWER BOUQUET
+# ============================================================
+
+WIDTH, HEIGHT = 900, 680
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("A Little Glowing Bouquet")
+clock = pygame.time.Clock()
+
+BACKGROUND = (3, 8, 18)
+
+# Çiçek sapları için daha zengin ve yumuşak yeşil tonları
+STEM_OLIVE = (95, 120, 55)
+STEM_OLIVE_LIGHT = (150, 175, 105)
+
+STEM_SAGE = (120, 140, 125)
+STEM_SAGE_LIGHT = (170, 190, 175)
+
+STEM_FOREST = (35, 90, 60)
+STEM_FOREST_LIGHT = (70, 140, 100)
+
+LEAF_VEIN = (190, 225, 190)
+
+# TURKUAZ KASIMPATI
+TURQUOISE = (30, 144, 255)
+TURQUOISE_LIGHT = (0, 245, 255)
+
+PEONY_CREAM = (226, 216, 197)
+PEONY_IVORY = (246, 240, 226)
+PEONY_WHITE = (255, 252, 245)
+
+LAVENDER_DARK = (104, 60, 160)
+LAVENDER_MID = (139, 100, 193)
+LAVENDER_LIGHT = (190, 157, 229)
+
+# KIRMIZI KASIMPATI
+RED_CHRYSANTHEMUM = (180, 15, 50)
+RED_CHRYSANTHEMUM_LIGHT = (255, 75, 110)
+
+BURGUNDY_CHRYSANTHEMUM = (105, 15, 45)
+BURGUNDY_CHRYSANTHEMUM_LIGHT = (175, 40, 75)
+
+GRASS_DARK = (24, 85, 55)
+GRASS_DEEP = (35, 110, 70)
+GRASS_GREEN = (55, 145, 88)
+GRASS_LIGHT = (90, 180, 110)
+GRASS_BRIGHT = (125, 210, 135)
+
+YELLOW_DANDELION = (255, 210, 55)
+YELLOW_DANDELION_LIGHT = (255, 239, 135)
+
+# ============================================================
+# 1. ÇİÇEKLER
+# ============================================================
+
+plants = [
+    {"x": 380, "height": 305, "delay": 0.3, "type": "lavender", "size": 0.88, "bend": -22, "curve": -18,
+     "stem": STEM_SAGE, "stem_light": STEM_SAGE_LIGHT},
+
+    {"x": 400, "height": 350, "delay": 1.1, "type": "red_chrysanthemum", "size": 1.05, "bend": -15, "curve": 14,
+     "stem": STEM_FOREST, "stem_light": STEM_FOREST_LIGHT},
+
+    {"x": 420, "height": 285, "delay": 0.0, "type": "lavender", "size": 0.88, "bend": -12, "curve": -12,
+     "stem": STEM_OLIVE, "stem_light": STEM_OLIVE_LIGHT},
+
+    {"x": 440, "height": 330, "delay": 0.25, "type": "peony", "size": 1.00, "bend": -6, "curve": 16,
+     "stem": STEM_SAGE, "stem_light": STEM_SAGE_LIGHT},
+
+    {"x": 455, "height": 270, "delay": 0.50, "type": "carnation", "size": 0.90, "bend": -2, "curve": -10,
+     "stem": STEM_FOREST, "stem_light": STEM_FOREST_LIGHT},
+
+    {"x": 475, "height": 365, "delay": 0.75, "type": "chrysanthemum", "size": 1.00, "bend": 2, "curve": 12,
+     "stem": STEM_OLIVE, "stem_light": STEM_OLIVE_LIGHT},
+
+    {"x": 495, "height": 315, "delay": 0.40, "type": "peony", "size": 0.96, "bend": 7, "curve": -14,
+     "stem": STEM_SAGE, "stem_light": STEM_SAGE_LIGHT},
+
+    {"x": 515, "height": 340, "delay": 0.95, "type": "carnation", "size": 0.94, "bend": 12, "curve": 11,
+     "stem": STEM_OLIVE, "stem_light": STEM_OLIVE_LIGHT},
+
+    {"x": 535, "height": 295, "delay": 0.65, "type": "lavender", "size": 0.90, "bend": 17, "curve": -15,
+     "stem": STEM_FOREST, "stem_light": STEM_FOREST_LIGHT},
+
+    {"x": 555, "height": 325, "delay": 1.5, "type": "burgundy_chrysanthemum", "size": 1.05, "bend": 22, "curve": 14,
+     "stem": STEM_SAGE, "stem_light": STEM_SAGE_LIGHT},
+
+    {"x": 575, "height": 315, "delay": 1.0, "type": "lavender", "size": 0.92, "bend": 28, "curve": -13,
+     "stem": STEM_OLIVE, "stem_light": STEM_OLIVE_LIGHT},
+]
+
+plant_opened = {i: False for i in range(len(plants))}
+plant_action_times = {i: -10.0 for i in range(len(plants))}
+
+
+# ============================================================
+# 2. YARDIMCI FONKSİYONLAR
+# ============================================================
+
+def clamp(value):
+    return max(0.0, min(1.0, value))
+
+
+def ease(value):
+    value = clamp(value)
+    return value * value * (3 - 2 * value)
+
+
+def mix_color(a, b, amount):
+    amount = clamp(amount)
+    return tuple(
+        int(a[i] + (b[i] - a[i]) * amount)
+        for i in range(3)
+    )
+
+
+# ============================================================
+# 3. TAÇ YAPRAKLARI
+# ============================================================
+
+def draw_petal(surface, bx, by, tx, ty, width, color, curve=0.0):
+    dx = tx - bx
+    dy = ty - by
+    length = math.hypot(dx, dy)
+
+    if length < 1:
+        return
+
+    px = -dy / length
+    py = dx / length
+    points = []
+
+    for i in range(9):
+        t = i / 9
+        bulge = math.sin(math.pi * t) * width
+        bend = math.sin(math.pi * t) * curve
+        points.append((
+            int(bx + dx * t + px * (bulge + bend)),
+            int(by + dy * t + py * (bulge + bend))
+        ))
+
+    points.append((int(tx), int(ty)))
+
+    for i in range(8, -1, -1):
+        t = i / 9
+        bulge = math.sin(math.pi * t) * width
+        bend = math.sin(math.pi * t) * curve
+        points.append((
+            int(bx + dx * t - px * bulge + px * bend),
+            int(by + dy * t - py * bulge + py * bend)
+        ))
+
+    pygame.draw.polygon(surface, color, points)
+
+
+def draw_ruffled_petal(surface, bx, by, tx, ty, width, color, phase):
+    dx = tx - bx
+    dy = ty - by
+    length = math.hypot(dx, dy)
+
+    if length < 1:
+        return
+
+    px = -dy / length
+    py = dx / length
+    points = []
+
+    for i in range(13):
+        t = i / 13
+        wave = math.sin(phase + i * 1.35) * width * 0.22
+        side = math.sin(math.pi * t) * width + wave * t
+        points.append((
+            int(bx + dx * t + px * side),
+            int(by + dy * t + py * side)
+        ))
+
+    points.append((int(tx), int(ty)))
+
+    for i in range(12, -1, -1):
+        t = i / 13
+        wave = math.sin(phase + i * 1.35) * width * 0.22
+        side = math.sin(math.pi * t) * width + wave * t
+        points.append((
+            int(bx + dx * t - px * side),
+            int(by + dy * t - py * side)
+        ))
+
+    pygame.draw.polygon(surface, color, points)
+
+
+# ============================================================
+# 4. SAP KONUMU
+# ============================================================
+
+def plant_position(plant, t, elapsed):
+    base_x = WIDTH / 2
+    sway = math.sin(elapsed * 1.15 + plant["x"] * 0.018) * 3.5
+
+    bend = plant.get("bend", 0)
+    curve = plant.get("curve", 0)
+
+    x = base_x + (plant["x"] - base_x) * t
+    x += bend * math.sin(t * math.pi / 2)
+    x += curve * math.sin(math.pi * t)
+    x += math.sin(t * 4.2 + plant["x"] * 0.02) * 8.0 * math.sin(t * math.pi)
+    x += sway * t
+
+    y = HEIGHT - 43 - plant["height"] * t
+    return x, y
+
+
+# ============================================================
+# 5. DENGELİ VE ZARİF ORGANİK YAPRAKLAR
+# ============================================================
+
+def draw_leaf(surface, x, y, direction, size, growth, base_stem_color):
+    size *= growth * 0.6  # Narin ve şık boyut
+
+    if size < 2:
+        return
+
+    ux = math.cos(direction)
+    uy = math.sin(direction)
+
+    leaf_surf = pygame.Surface((int(size * 2.2), int(size * 2.2)), pygame.SRCALPHA)
+    leaf_color = mix_color(base_stem_color, (45, 125, 75), 0.5)
+
+    ellipse_rect = (int(size * 0.1), int(size * 0.1), int(size * 1.5), int(size * 0.75))
+    pygame.draw.ellipse(leaf_surf, leaf_color, ellipse_rect)
+
+    pygame.draw.line(
+        leaf_surf, LEAF_VEIN,
+        (int(size * 0.2), int(size * 0.48)),
+        (int(size * 1.4), int(size * 0.48)),
+        1
+    )
+
+    angle_deg = math.degrees(direction)
+    rotated_leaf = pygame.transform.rotate(leaf_surf, -angle_deg)
+    surface.blit(rotated_leaf, (int(x - size * 0.7), int(y - size * 0.7)))
+
+
+# ============================================================
+# 6. ŞAKAYIK
+# ============================================================
+
+def draw_peony(surface, x, y, bloom, time, scale=1.0):
+    b = ease(bloom)
+    if b <= 0:
+        return
+
+    cx = x + math.sin(time * 1.25 + x * 0.02) * 1.8
+    s = scale
+
+    for i in range(13):
+        t = i / 12
+        bx = cx - 19 * s + t * 38 * s
+        tx = cx - 37 * s + t * 74 * s
+        ty = y - (28 + math.sin(t * math.pi) * 24) * s * b
+        color = PEONY_CREAM if i % 3 == 0 else PEONY_IVORY
+        draw_petal(surface, bx, y, tx, ty, 7 * s * b, color, curve=1.2 * s)
+
+    for i in range(11):
+        t = i / 10
+        bx = cx - 15 * s + t * 30 * s
+        tx = cx - 26 * s + t * 52 * s
+        ty = y - (19 + math.sin(t * math.pi) * 20) * s * b
+        color = PEONY_WHITE if i % 2 == 0 else PEONY_IVORY
+        draw_petal(surface, bx, y + 2 * s, tx, ty, 5.5 * s * b, color, curve=-1.0 * s)
+
+
+# ============================================================
+# 7. KARANFİL
+# ============================================================
+
+def draw_carnation(surface, x, y, bloom, time, scale=1.0):
+    b = ease(bloom)
+    if b <= 0:
+        return
+
+    cx = x + math.sin(time * 1.4 + x * 0.02) * 1.5
+    s = scale
+
+    for i in range(23):
+        t = i / 22
+        bx = cx - 17 * s + t * 34 * s
+        spread = (t - 0.5) * 2
+        tx = cx + spread * 31 * s
+        wave = math.sin(i * 2.1) * 3.5
+        ty = y - (23 + 8 * (1 - abs(spread)) + wave) * s * b
+        color = mix_color(TURQUOISE, TURQUOISE_LIGHT, (i % 4) / 4)
+        draw_ruffled_petal(surface, bx, y, tx, ty, 3.2 * s * b, color, i * 0.7)
+
+    for i in range(13):
+        t = i / 12
+        bx = cx - 12 * s + t * 24 * s
+        tx = cx - 24 * s + t * 48 * s
+        ty = y - (14 + math.sin(t * math.pi) * 9) * s * b
+        draw_ruffled_petal(surface, bx, y + 2, tx, ty, 2.8 * s * b, (105, 245, 231), i)
+
+
+# ============================================================
+# 8. LAVANTA
+# ============================================================
+
+def draw_lavender(surface, x, y, bloom, time, scale=1.0):
+    b = ease(bloom)
+    if b <= 0:
+        return
+
+    s = scale
+    cx = x + math.sin(time * 1.1 + x * 0.02) * 1.4
+    colors = [LAVENDER_DARK, LAVENDER_MID, LAVENDER_LIGHT]
+
+    for i in range(10):
+        t = i / 9
+        py = y + 17 * s - t * 67 * s * b
+        offset = (5.5 + math.sin(i * 1.6) * 1.2) * s
+        col = colors[i % 3]
+
+        draw_petal(surface, cx, py, cx - offset, py - 7 * s * b, 2.8 * s * b, col)
+        draw_petal(surface, cx, py - 2, cx + offset, py - 8 * s * b, 2.8 * s * b, colors[(i + 1) % 3])
+
+        if i % 2 == 0:
+            draw_petal(surface, cx, py, cx + 1.5 * s, py - 10 * s * b, 2.4 * s * b, LAVENDER_LIGHT)
+
+
+# ============================================================
+# 9. KASIMPATI
+# ============================================================
+
+def draw_chrysanthemum(surface, x, y, bloom, time, scale=1.0, dark_color=TURQUOISE, light_color=TURQUOISE_LIGHT):
+    b = ease(bloom)
+    if b <= 0:
+        return
+
+    s = scale
+    cx = x + math.sin(time * 1.3 + x * 0.02) * 1.7
+
+    for i in range(35):
+        t = i / 34
+        spread = (t - 0.5) * 2
+        bx = cx + spread * 8 * s
+        tx = cx + spread * 38 * s
+        ty = y - (27 + (1 - abs(spread)) * 23 + math.sin(i * 2.2) * 2) * s * b
+        color = mix_color(dark_color, light_color, 0.25 + 0.7 * (i % 5) / 5)
+        draw_petal(surface, bx, y, tx, ty, 2.7 * s * b, color, curve=0.7)
+
+    for i in range(19):
+        t = i / 18
+        spread = (t - 0.5) * 2
+        bx = cx + spread * 7 * s
+        tx = cx + spread * 27 * s
+        ty = y - (16 + (1 - abs(spread)) * 13) * s * b
+        color = mix_color(light_color, (255, 255, 255), 0.25)
+        draw_petal(surface, bx, y + 2, tx, ty, 1.9 * s * b, color)
+
+
+# ============================================================
+# 10. SAPLAR VE BOYDAN BOYA DENGELİ YAPRAK DAĞILIMI
+# ============================================================
+
+def draw_stem_and_leaves(surface, plant, elapsed, growth):
+    visible_length = int(45 * growth)
+    if visible_length < 1:
+        return
+
+    points = [
+        plant_position(plant, i / 45, elapsed)
+        for i in range(visible_length + 1)
+    ]
+
+    for i in range(len(points) - 1):
+        pygame.draw.line(
+            surface, plant["stem"],
+            tuple(map(int, points[i])),
+            tuple(map(int, points[i + 1])),
+            5
+        )
+        pygame.draw.line(
+            surface, plant["stem_light"],
+            tuple(map(int, points[i])),
+            tuple(map(int, points[i + 1])),
+            2
+        )
+
+    # Yapraklar alt, orta ve üst kısımlara dengeli şekilde yayıldı
+    leaf_levels = [0.25, 0.45, 0.65, 0.80]
+
+    for index, level in enumerate(leaf_levels):
+        if growth > level:
+            leaf_growth = ease((growth - level) / 0.18)
+            px, py = plant_position(plant, level, elapsed)
+            direction = -0.52 if index % 2 == 0 else 3.65
+            draw_leaf(surface, px, py, direction, 32 * plant["size"], leaf_growth, plant["stem"])
+
+
+# ============================================================
+# 11. BEYAZ-KREM SEDEF ÇİÇEKLERİ (STATICE)
+# ============================================================
+
+random.seed(105)
+statice_branches = []
+for _ in range(22):
+    statice_branches.append({
+        "x": random.randint(300, 630),
+        "height": random.randint(330, 430),
+        "delay": random.uniform(0.1, 1.8),
+        "sway_speed": random.uniform(1.2, 2.2),
+        "sway_amount": random.uniform(6, 14),
+        "color": random.choice([
+            (255, 252, 245),
+            (245, 238, 220),
+            (230, 225, 210),
+            (250, 245, 235)
+        ])
+    })
+
+
+def draw_statice_flowers(surface, elapsed):
+    ground_y = HEIGHT - 42
+
+    for branch in statice_branches:
+        growth = ease((elapsed - branch["delay"]) / 3.0)
+        if growth <= 0:
+            continue
+
+        base_x = branch["x"]
+        sway = math.sin(elapsed * branch["sway_speed"] + base_x * 0.05) * branch["sway_amount"] * growth
+        max_h = branch["height"] * growth
+
+        tip_x = base_x + sway * 1.5
+        tip_y = ground_y - max_h
+
+        pygame.draw.line(
+            surface, (110, 100, 90),
+            (base_x, ground_y),
+            (int(tip_x), int(tip_y)),
+            1
+        )
+
+        if growth > 0.4:
+            bloom_p = (growth - 0.4) / 0.6
+            for step in range(5):
+                t_pos = 0.3 + step * 0.15
+                if t_pos > growth:
+                    break
+
+                cx = base_x + sway * t_pos
+                cy = ground_y - max_h * t_pos
+
+                for offset_i in range(3):
+                    ox = cx + math.sin(step + offset_i) * 6
+                    oy = cy + (offset_i - 1) * 5
+                    pygame.draw.circle(surface, branch["color"], (int(ox), int(oy)), int(2 * bloom_p))
+
+
+# ============================================================
+# 12. AY VE BULUTLAR
+# ============================================================
+
+def draw_moon(surface):
+    moon_glow = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    pygame.draw.circle(moon_glow, (230, 240, 255, 20), (150, 95), 55)
+    pygame.draw.circle(moon_glow, (230, 240, 255, 32), (150, 95), 35)
+    surface.blit(moon_glow, (0, 0))
+
+    pygame.draw.circle(surface, (235, 243, 250), (150, 95), 24)
+    pygame.draw.circle(surface, (3, 8, 18), (158, 91), 21)
+
+
+def draw_clouds(surface, elapsed):
+    clouds = [
+        (100, 90, 0.7, 1.0),
+        (390, 145, -0.4, 0.8),
+        (690, 75, 0.5, 1.2),
+        (850, 180, -0.6, 0.9),
+    ]
+
+    cloud_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+
+    for start_x, y, speed, scale in clouds:
+        x = (start_x + elapsed * speed * 18) % (WIDTH + 240) - 120
+        color = (155, 190, 205, 30)
+        parts = [
+            (-35, 8, 42, 22),
+            (-12, -5, 48, 32),
+            (18, -12, 55, 38),
+            (48, 0, 48, 29),
+            (75, 10, 38, 20),
+        ]
+
+        for dx, dy, w, h in parts:
+            pygame.draw.ellipse(
+                cloud_surface, color,
+                (int(x + dx * scale), int(y + dy * scale), int(w * scale), int(h * scale))
+            )
+
+    surface.blit(cloud_surface, (0, 0))
+
+
+def draw_foreground_cloud(surface, elapsed):
+    cloud_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    speed = 13
+    x = (400 + elapsed * speed) % (WIDTH + 500) - 250
+    y = 330
+    scale = 1.2
+    color = (165, 200, 215, 20)
+
+    parts = [
+        (-45, 10, 50, 25),
+        (-15, -6, 55, 35),
+        (22, -14, 60, 40),
+        (55, 2, 52, 30),
+        (85, 12, 42, 22),
+    ]
+
+    for dx, dy, w, h in parts:
+        pygame.draw.ellipse(
+            cloud_surface, color,
+            (int(x + dx * scale), int(y + dy * scale), int(w * scale), int(h * scale))
+        )
+
+    surface.blit(cloud_surface, (0, 0))
+
+
+# ============================================================
+# 13. ATEŞ BÖCEKLERİ
+# ============================================================
+
+random.seed(99)
+fireflies = [
+    {
+        "x": random.randint(50, WIDTH - 50),
+        "y": random.randint(150, HEIGHT - 100),
+        "vx": random.uniform(-0.4, 0.4),
+        "vy": random.uniform(-0.3, 0.3),
+        "phase": random.uniform(0, math.pi * 2),
+        "speed": random.uniform(1.2, 2.5)
+    }
+    for _ in range(16)
+]
+
+
+def draw_fireflies(surface, elapsed):
+    for ff in fireflies:
+        ff["x"] += ff["vx"] + math.sin(elapsed * ff["speed"] + ff["phase"]) * 0.3
+        ff["y"] += ff["vy"] + math.cos(elapsed * ff["speed"] * 0.7 + ff["phase"]) * 0.25
+
+        if ff["x"] < 0:
+            ff["x"] = WIDTH
+        elif ff["x"] > WIDTH:
+            ff["x"] = 0
+        if ff["y"] < 120:
+            ff["y"] = 120
+        elif ff["y"] > HEIGHT - 50:
+            ff["y"] = HEIGHT - 50
+
+        pulse = 0.5 + 0.5 * math.sin(elapsed * 3.5 + ff["phase"])
+        alpha = int(90 + 165 * pulse)
+        radius = int(2 + pulse * 2)
+
+        glow_surf = pygame.Surface((radius * 6, radius * 6), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (255, 240, 140, alpha // 3), (radius * 3, radius * 3), radius * 3)
+        pygame.draw.circle(glow_surf, (255, 255, 200, alpha), (radius * 3, radius * 3), radius)
+        surface.blit(glow_surf, (int(ff["x"] - radius * 3), int(ff["y"] - radius * 3)))
+
+
+# ============================================================
+# 14. ARKA PLAN IŞIKLARI
+# ============================================================
+
+def draw_background_details(surface, elapsed):
+    glow_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+
+    for radius in range(220, 20, -15):
+        alpha = min(int(1.2 * (220 - radius)), 25)
+        pygame.draw.circle(
+            glow_surface, (35, 135, 130, alpha),
+            (WIDTH // 2, HEIGHT - 230), radius
+        )
+
+    surface.blit(glow_surface, (0, 0))
+
+    for i in range(45):
+        x = (i * 97 + math.sin(elapsed + i) * 18) % WIDTH
+        y = (i * 61 + elapsed * (8 + i % 5)) % (HEIGHT - 60)
+        pulse = 0.5 + 0.5 * math.sin(elapsed * 2 + i)
+        radius = 1 + int(pulse * 2)
+        color = (int(75 + pulse * 90), int(135 + pulse * 100), int(150 + pulse * 100))
+        pygame.draw.circle(surface, color, (int(x), int(y)), radius)
+
+    for i in range(12):
+        x = (i * 83 + 40) % WIDTH
+        y = (i * 59 + 25) % (HEIGHT - 100)
+        pulse = 0.5 + 0.5 * math.sin(elapsed * 1.7 + i * 2)
+
+        if pulse > 0.82:
+            size = 3
+            pygame.draw.line(surface, (150, 220, 220), (x - size, y), (x + size, y), 1)
+            pygame.draw.line(surface, (150, 220, 220), (x, y - size), (x, y + size), 1)
+
+
+# ============================================================
+# 15. ÇİMENLER
+# ============================================================
+
+random.seed(81)
+all_grass_blades = []
+for i in range(240):
+    all_grass_blades.append({
+        "offset": random.uniform(-WIDTH // 2, WIDTH // 2),
+        "height": random.uniform(60, 145),
+        "width": random.uniform(2.5, 6.0),
+        "color": random.choice([
+            GRASS_DARK,
+            GRASS_DEEP,
+            GRASS_GREEN,
+            GRASS_LIGHT,
+            GRASS_BRIGHT
+        ]),
+        "side": random.choice([-1, 1]),
+        "delay": random.uniform(0.1, 3.5),
+        "duration": random.uniform(2.0, 4.0)
+    })
+
+
+def draw_all_grass(surface, elapsed):
+    center_x = WIDTH // 2
+    ground_y = HEIGHT - 41
+
+    pygame.draw.ellipse(
+        surface, (15, 55, 40),
+        (0, ground_y - 13, WIDTH, 30)
+    )
+
+    for i, blade in enumerate(all_grass_blades):
+        growth = ease(
+            (elapsed - blade["delay"]) / blade["duration"]
+        )
+
+        if growth <= 0:
+            continue
+
+        base_x = center_x + blade["offset"]
+        base_y = ground_y + 3
+
+        height = blade["height"] * growth
+        width = blade["width"]
+        side = blade["side"]
+
+        sway = math.sin(
+            elapsed * 1.6 + blade["offset"] * 0.045
+        ) * 6 * growth
+
+        tip_x = base_x + side * height * 0.38 + sway
+        tip_y = base_y - height
+
+        middle_x = (base_x + tip_x) / 2 + sway * 0.5
+        middle_y = (base_y + tip_y) / 2
+
+        points = [
+            (int(base_x - width), int(base_y)),
+            (int(middle_x - width * 0.4), int(middle_y)),
+            (int(tip_x), int(tip_y)),
+            (int(middle_x + width * 0.4), int(middle_y)),
+            (int(base_x + width), int(base_y))
+        ]
+
+        pygame.draw.polygon(surface, blade["color"], points)
+
+        pygame.draw.line(
+            surface,
+            mix_color(blade["color"], (180, 225, 140), 0.4),
+            (int(base_x), int(base_y)),
+            (int(tip_x), int(tip_y)),
+            1
+        )
+
+
+# ============================================================
+# 16. KARAHİNDİBALAR
+# ============================================================
+
+dandelions = [
+    {"x": 75, "height": 135, "delay": 0.5, "type": "yellow"},
+    {"x": 165, "height": 115, "delay": 1.2, "type": "white"},
+    {"x": 245, "height": 125, "delay": 2.0, "type": "yellow"},
+    {"x": 330, "height": 105, "delay": 1.4, "type": "white"},
+    {"x": 590, "height": 115, "delay": 0.8, "type": "yellow"},
+    {"x": 675, "height": 140, "delay": 1.7, "type": "white"},
+    {"x": 755, "height": 125, "delay": 2.5, "type": "yellow"},
+    {"x": 835, "height": 110, "delay": 1.1, "type": "white"},
+]
+
+small_dandelions = [
+    {"x": 35, "height": 28, "delay": 0.5, "type": "white"},
+    {"x": 145, "height": 32, "delay": 1.2, "type": "yellow"},
+    {"x": 215, "height": 25, "delay": 0.8, "type": "white"},
+    {"x": 285, "height": 30, "delay": 2.0, "type": "yellow"},
+    {"x": 365, "height": 27, "delay": 1.5, "type": "white"},
+    {"x": 535, "height": 30, "delay": 1.0, "type": "yellow"},
+    {"x": 625, "height": 28, "delay": 1.8, "type": "white"},
+    {"x": 710, "height": 32, "delay": 0.6, "type": "yellow"},
+    {"x": 850, "height": 27, "delay": 2.2, "type": "white"},
+]
+
+clicked_seeds = []
+
+
+def draw_dandelion_head(surface, x, y, bloom, flower_type):
+    if bloom <= 0:
+        return
+
+    if flower_type == "yellow":
+        for i in range(24):
+            angle = (2 * math.pi * i) / 24
+            inner_x = x + math.cos(angle) * 2
+            inner_y = y + math.sin(angle) * 2
+            outer_x = x + math.cos(angle) * 11 * bloom
+            outer_y = y + math.sin(angle) * 11 * bloom
+
+            pygame.draw.line(surface, YELLOW_DANDELION, (int(inner_x), int(inner_y)), (int(outer_x), int(outer_y)), 2)
+            pygame.draw.circle(surface, YELLOW_DANDELION_LIGHT, (int(outer_x), int(outer_y)), 1)
+
+        pygame.draw.circle(surface, (255, 190, 30), (int(x), int(y)), max(2, int(4 * bloom)))
+
+    else:
+        for i in range(22):
+            angle = (2 * math.pi * i) / 22
+            radius = 9 * bloom
+
+            end_x = x + math.cos(angle) * radius
+            end_y = y + math.sin(angle) * radius
+
+            pygame.draw.line(surface, (225, 235, 230), (int(x), int(y)), (int(end_x), int(end_y)), 1)
+            pygame.draw.circle(surface, (248, 250, 245), (int(end_x), int(end_y)), 1)
+
+        pygame.draw.circle(surface, (235, 242, 235), (int(x), int(y)), 2)
+
+
+def draw_dandelions(surface, elapsed):
+    ground_y = HEIGHT - 42
+
+    for index, d in enumerate(dandelions):
+        x, height, delay, flower_type = d["x"], d["height"], d["delay"], d["type"]
+        growth = ease((elapsed - delay) / 4.0)
+        if growth <= 0:
+            continue
+
+        sway = math.sin(elapsed * 1.5 + index) * 5 * growth
+        tip_x = x + sway
+        tip_y = ground_y - height * growth
+        d["current_pos"] = (tip_x, tip_y)
+
+        pygame.draw.line(surface, (50, 140, 80), (x, ground_y), (int(tip_x), int(tip_y)), 3)
+        pygame.draw.line(surface, (85, 175, 100), (x, ground_y), (int(tip_x), int(tip_y)), 1)
+
+        bloom = ease((growth - 0.45) / 0.55)
+        draw_dandelion_head(surface, tip_x, tip_y, bloom, flower_type)
+
+
+def draw_small_dandelions(surface, elapsed):
+    ground_y = HEIGHT - 42
+
+    for index, d in enumerate(small_dandelions):
+        x, height, delay, flower_type = d["x"], d["height"], d["delay"], d["type"]
+        growth = ease((elapsed - delay) / 3.5)
+        if growth <= 0:
+            continue
+
+        sway = math.sin(elapsed * 1.8 + index) * 3 * growth
+        tip_x = x + sway
+        tip_y = ground_y - height * growth
+        d["current_pos"] = (tip_x, tip_y)
+
+        pygame.draw.line(surface, (60, 145, 80), (x, ground_y), (int(tip_x), int(tip_y)), 2)
+        bloom = ease((growth - 0.45) / 0.55)
+        draw_dandelion_head(surface, tip_x, tip_y, bloom, flower_type)
+
+
+# ============================================================
+# 17. UÇUŞAN TOHUMLAR VE TIKLANAN TOHUMLAR
+# ============================================================
+
+def draw_flying_seeds(surface, elapsed):
+    random.seed(25)
+    for i in range(30):
+        start_time = 18 + i * 0.7
+        progress = (elapsed - start_time) / 9
+
+        if progress < 0 or progress > 1:
+            continue
+
+        start_x = random.randint(100, 800)
+        start_y = HEIGHT - random.randint(65, 150)
+
+        x = start_x + progress * 180
+        y = start_y - progress * 110 + math.sin(elapsed * 2 + i) * 12
+
+        if x > WIDTH:
+            continue
+
+        pygame.draw.line(surface, (220, 235, 230), (int(x), int(y)), (int(x - 5), int(y - 5)), 1)
+        pygame.draw.circle(surface, (245, 250, 245), (int(x), int(y)), 2)
+
+    for seed in clicked_seeds[:]:
+        seed["x"] += seed["vx"]
+        seed["y"] += seed["vy"]
+        seed["vy"] -= 0.05
+        seed["life"] -= 1
+
+        if seed["life"] <= 0:
+            clicked_seeds.remove(seed)
+            continue
+
+        pygame.draw.line(surface, (220, 235, 230), (int(seed["x"]), int(seed["y"])),
+                         (int(seed["x"] - 6), int(seed["y"] - 6)), 1)
+        pygame.draw.circle(surface, (255, 255, 255), (int(seed["x"]), int(seed["y"])), 2)
+
+
+# ============================================================
+# 18. ÇİÇEK BAŞLARINI ÇİZME
+# ============================================================
+
+def draw_flower_head(surface, plant, elapsed, stem_growth, bloom):
+    if stem_growth < 0.9:
+        return
+
+    x, y = plant_position(plant, 1.0, elapsed)
+    kind = plant["type"]
+    scale = plant["size"]
+
+    if bloom < 0.2:
+        bud_radius = int(8 * scale)
+        bud_color = STEM_OLIVE_LIGHT if kind == "lavender" else (160, 35, 65)
+        if kind == "peony":
+            bud_color = PEONY_CREAM
+        elif kind == "carnation":
+            bud_color = TURQUOISE_LIGHT
+
+        pygame.draw.ellipse(surface, bud_color,
+                            (int(x - bud_radius), int(y - bud_radius * 1.5), int(bud_radius * 2), int(bud_radius * 3)))
+        pygame.draw.ellipse(surface, (210, 235, 210),
+                            (int(x - bud_radius * 0.5), int(bud_radius + y - bud_radius * 1.8), int(bud_radius),
+                             int(bud_radius * 1.5)), 1)
+        return
+
+    if kind == "peony":
+        draw_peony(surface, x, y, bloom, elapsed, scale)
+    elif kind == "carnation":
+        draw_carnation(surface, x, y, bloom, elapsed, scale)
+    elif kind == "lavender":
+        draw_lavender(surface, x, y, bloom, elapsed, scale)
+    elif kind == "chrysanthemum":
+        draw_chrysanthemum(surface, x, y, bloom, elapsed, scale)
+    elif kind == "red_chrysanthemum":
+        draw_chrysanthemum(surface, x, y, bloom, elapsed, scale, RED_CHRYSANTHEMUM, RED_CHRYSANTHEMUM_LIGHT)
+    elif kind == "burgundy_chrysanthemum":
+        draw_chrysanthemum(surface, x, y, bloom, elapsed, scale, BURGUNDY_CHRYSANTHEMUM, BURGUNDY_CHRYSANTHEMUM_LIGHT)
+
+
+# ============================================================
+# 19. YILDIZLAR
+# ============================================================
+
+random.seed(12)
+stars = [
+    (random.randint(0, WIDTH), random.randint(0, HEIGHT - 100), random.choice([1, 1, 2]))
+    for _ in range(85)
+]
+
+# ============================================================
+# 20. ANA ANİMASYON DÖNGÜSÜ
+# ============================================================
+
+start_time = pygame.time.get_ticks() / 1000
+running = True
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            mx, my = event.pos
+            elapsed = pygame.time.get_ticks() / 1000 - start_time
+
+            for index, plant in enumerate(plants):
+                growth = ease((elapsed - plant["delay"]) / 3.8)
+                if growth >= 0.9:
+                    px, py = plant_position(plant, 1.0, elapsed)
+                    if math.hypot(mx - px, my - py) < 35:
+                        plant_opened[index] = not plant_opened[index]
+                        plant_action_times[index] = elapsed
+                        break
+
+            for d in dandelions:
+                if d["type"] == "white" and "current_pos" in d:
+                    dx, dy = d["current_pos"]
+                    if math.hypot(mx - dx, my - dy) < 25:
+                        for _ in range(12):
+                            clicked_seeds.append({
+                                "x": dx, "y": dy,
+                                "vx": random.uniform(-1.5, 1.5),
+                                "vy": random.uniform(-2.0, 0.5),
+                                "life": random.randint(120, 200)
+                            })
+
+            for d in small_dandelions:
+                if d["type"] == "white" and "current_pos" in d:
+                    dx, dy = d["current_pos"]
+                    if math.hypot(mx - dx, my - dy) < 20:
+                        for _ in range(8):
+                            clicked_seeds.append({
+                                "x": dx, "y": dy,
+                                "vx": random.uniform(-1.2, 1.2),
+                                "vy": random.uniform(-1.8, 0.4),
+                                "life": random.randint(100, 160)
+                            })
+
+    elapsed = pygame.time.get_ticks() / 1000 - start_time
+
+    screen.fill(BACKGROUND)
+
+    draw_background_details(screen, elapsed)
+    draw_moon(screen)
+    draw_clouds(screen, elapsed)
+
+    for sx, sy, size in stars:
+        pulse = 0.75 + 0.25 * math.sin(elapsed * 1.4 + sx)
+        color = (int(35 * pulse), int(76 * pulse), int(91 * pulse))
+        pygame.draw.circle(screen, color, (sx, sy), size)
+
+    draw_fireflies(screen, elapsed)
+
+    growth_values = {}
+
+    for index, plant in enumerate(plants):
+        growth = ease((elapsed - plant["delay"]) / 3.8)
+        growth_values[index] = growth
+
+        if growth > 0:
+            draw_stem_and_leaves(screen, plant, elapsed, growth)
+
+    draw_statice_flowers(screen, elapsed)
+
+    pygame.draw.line(screen, (25, 80, 65), (0, HEIGHT - 41), (WIDTH, HEIGHT - 41), 2)
+
+    draw_all_grass(screen, elapsed)
+
+    draw_dandelions(screen, elapsed)
+    draw_small_dandelions(screen, elapsed)
+
+    for index in sorted(range(len(plants)), key=lambda i: plants[i]["height"]):
+        plant = plants[index]
+        growth = growth_values[index]
+
+        action_elapsed = elapsed - plant_action_times[index]
+
+        if action_elapsed < 0.8:
+            progress = action_elapsed / 0.8
+            if not plant_opened[index]:
+                bloom = 1.0 - ease(progress) * 1.0
+            else:
+                bloom = ease(progress) * 1.0
+        else:
+            bloom = 1.0 if plant_opened[index] else 0.0
+
+        if growth > 0:
+            draw_flower_head(screen, plant, elapsed, growth, bloom)
+
+    draw_foreground_cloud(screen, elapsed)
+
+    draw_flying_seeds(screen, elapsed)
+
+    pygame.display.flip()
+    clock.tick(60)
+
+# ============================================================
+# 21. PROGRAMI KAPAT
+# ============================================================
+
+pygame.quit()
